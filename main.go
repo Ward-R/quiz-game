@@ -56,7 +56,6 @@ func main() {
 		if userAnswer == answer {
 			numbCorrect += 1
 		}
-		fmt.Println(answer) // debug
 		problemCounter += 1
 	}
 	percent := roundTo(((numbCorrect / (problemCounter - 1)) * 100), 1)
