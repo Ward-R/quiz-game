@@ -10,11 +10,14 @@ import (
 	"strconv"
 )
 
-func toStr(s string) int {
+// Program does not check for white space, case insensitivity, spaces, or nil user entry.
+
+// this returns an interface holding either a string or an int type value.
+func parseQuizAnswer(s string) interface{} {
 	number, err := strconv.Atoi(s)
 
 	if err != nil {
-		fmt.Println("Error converting to number", err)
+		return s
 	}
 	return number
 }
@@ -46,14 +49,35 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		// questionString := strings.Split(record, " ")
+		// parse the question and the answer from the CSV.
+		// Further parse the CSV answer to either an int or a string as required.
 		question := record[0]
-		answer := toStr(record[1])
-		userAnswer := 0 // would need to change this to an interface later if you want to hold strings or ints depending on the quiz.
+		parsedQuizAnswer := parseQuizAnswer(record[1])
 
+		// Get and parse user inputted answer, check if correct.
+		var rawUserAnswer string
 		fmt.Printf("Problem #%v: %v = ", problemCounter, question)
-		fmt.Scan(&userAnswer)
-		if userAnswer == answer {
+		fmt.Scanln(&rawUserAnswer)
+
+		parsedUserAnswer := parseQuizAnswer(rawUserAnswer)
+
+		isCorrect := false
+		// extract the type of value from the interface
+		switch quizAnswerVal := parsedQuizAnswer.(type) {
+		case int:
+			if userAnswerVal, ok := parsedUserAnswer.(int); ok {
+				if userAnswerVal == quizAnswerVal {
+					isCorrect = true
+				}
+			}
+		case string:
+			if userAnswerVal, ok := parsedUserAnswer.(string); ok {
+				if userAnswerVal == quizAnswerVal {
+					isCorrect = true
+				}
+			}
+		}
+		if isCorrect {
 			numbCorrect += 1
 		}
 		problemCounter += 1
