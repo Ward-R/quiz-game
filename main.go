@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Program does not check for white space, case insensitivity, spaces, or nil user entry.
@@ -27,10 +28,30 @@ func roundTo(f float64, n int) float64 {
 	return math.Round(f*pow10_n) / pow10_n
 }
 
+func score(numbCorrect float64, totalQuestions float64) {
+	percent := roundTo(((numbCorrect / totalQuestions) * 100), 1)
+	fmt.Printf("You got %v/%v correct! Or %v%%\n", numbCorrect, totalQuestions, percent)
+}
+
 func main() {
+
+	//flags name := flag.<type string/int/bool>(variable name, default val, description)
+	timePtr := flag.Duration("limit", 30*time.Second, "quiz time limit")
+	filePtr := flag.String("file", "problems.csv", "quiz filename")
+	flag.Parse()
+
+	fmt.Println("Press Enter to start the quiz...")
+	var start string
+	fmt.Scanln(&start) // This will block until the user presses Enter
+
+	chTimeUp := time.After(*timePtr)
+	chUserAnswer := make(chan interface{})
+
 	fmt.Println("---Let the quiz begin!---")
 
-	file, err := os.Open("problems.csv") // For read access.
+	fileName := *filePtr
+
+	file, err := os.Open(fileName) // For read access.
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,50 +59,57 @@ func main() {
 
 	reader := csv.NewReader(file)
 
-	var problemCounter float64 = 1
+	records, err := reader.ReadAll()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	totalQuestions := len(records)
+
 	var numbCorrect float64 = 0
 
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
+quizLoop:
+	for i, record := range records {
+
 		// parse the question and the answer from the CSV.
 		// Further parse the CSV answer to either an int or a string as required.
 		question := record[0]
 		parsedQuizAnswer := parseQuizAnswer(record[1])
+		fmt.Printf("Problem #%v: %v = ", i+1, question)
 
 		// Get and parse user inputted answer, check if correct.
-		var rawUserAnswer string
-		fmt.Printf("Problem #%v: %v = ", problemCounter, question)
-		fmt.Scanln(&rawUserAnswer)
+		go func() {
+			var rawUserAnswer string
+			fmt.Scanln(&rawUserAnswer)
+			parsedUserAnswer := parseQuizAnswer(rawUserAnswer)
+			chUserAnswer <- parsedUserAnswer
+		}()
 
-		parsedUserAnswer := parseQuizAnswer(rawUserAnswer)
-
-		isCorrect := false
-		// extract the type of value from the interface
-		switch quizAnswerVal := parsedQuizAnswer.(type) {
-		case int:
-			if userAnswerVal, ok := parsedUserAnswer.(int); ok {
-				if userAnswerVal == quizAnswerVal {
-					isCorrect = true
+		select {
+		case <-chTimeUp:
+			fmt.Println("\nTime's up!")
+			break quizLoop
+		case userAnswerReceived := <-chUserAnswer:
+			isCorrect := false
+			// extract the type of value from the interface
+			switch correctAnswer := parsedQuizAnswer.(type) {
+			case int:
+				if userAnswerInt, ok := userAnswerReceived.(int); ok {
+					if userAnswerInt == correctAnswer {
+						isCorrect = true
+					}
+				}
+			case string:
+				if userAnswerVal, ok := userAnswerReceived.(string); ok {
+					if userAnswerVal == correctAnswer {
+						isCorrect = true
+					}
 				}
 			}
-		case string:
-			if userAnswerVal, ok := parsedUserAnswer.(string); ok {
-				if userAnswerVal == quizAnswerVal {
-					isCorrect = true
-				}
+			if isCorrect {
+				numbCorrect += 1
 			}
 		}
-		if isCorrect {
-			numbCorrect += 1
-		}
-		problemCounter += 1
 	}
-	percent := roundTo(((numbCorrect / (problemCounter - 1)) * 100), 1)
-	fmt.Printf("You got %v/%v correct! Or %v%%\n", numbCorrect, problemCounter-1, percent)
+	score(float64(numbCorrect), float64(totalQuestions))
 }
